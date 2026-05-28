@@ -246,7 +246,7 @@ Issues and PRs welcome. Commit convention:
 
 ## Credits
 
-This template was originally developed and validated at **** (Brazil) by [@marcoluvizan](https://github.com/marcoluvizan), during the **Tech Leads Club** IA Avançado workshop (2nd edition, May 2026). Opened up for the broader community.
+Developed and battle-tested by [@marcoluvizan](https://github.com/marcoluvizan) during the **Tech Leads Club** IA Avançado workshop (2nd edition, May 2026), validated on a real Java/Spring Boot 3 + Vue 3 production-grade project. Opened up for the broader community.
 
 Built on top of:
 
