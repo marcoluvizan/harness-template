@@ -64,7 +64,7 @@ Spektor fingerprinta cada execucao com hash de config+prompts+routing pra compar
 ### 3. microVM sandbox (Firecracker)
 Spektor planeja microVM por execucao.
 
-**Por que nao temos:** Linux-only, complexo no Windows, **codigo gerado para projetos Sinapsis nao e adversarial** — subprocess + ai-jail cobre.
+**Por que nao temos:** Linux-only, complexo no Windows, **codigo gerado para your projects nao e adversarial** — subprocess + ai-jail cobre.
 
 **Quando reconsiderar:** quando rodar codigo de terceiros desconhecidos (marketplace de skills, etc).
 
@@ -82,7 +82,7 @@ Esta implementacao tem coisas que Felipe nao detalhou publicamente:
 | Componente | Nossa vantagem | Justificativa |
 |---|---|---|
 | **Kill switch global por arquivo** | Foco 5 do Waldemar implementado literal | Setor regulado precisa |
-| **PII redactor (TODO Fase 3)** | Padroes BR (CPF/CNPJ/RG) | Especifico Sinapsis/LGPD |
+| **PII redactor (TODO Fase 3)** | Padroes BR (CPF/CNPJ/RG) | team-specific |
 | **Templates copiados literais** | `awesome-harness/templates/*` | Padrao da industria, nao reinvenamos |
 | **3 fases de adocao** | Plan progressivo, prova valor antes de avancar | Realismo de time pequeno |
 
@@ -107,6 +107,6 @@ Voce **pode** rodar tudo no Archon nativo sem mexer em nada.
 
 Esta implementacao cobre **a essencia funcional do que Felipe apresentou** com **2-3 semanas de eng** vs Spektor que tem um time + meses de desenvolvimento.
 
-Nao e produto. E **scaffold + padrao** copiavel pra qualquer projeto Sinapsis.
+Nao e produto. E **scaffold + padrao** copiavel pra qualquer your project.
 
 Se Spektor lancar publico e valer mais que esse setup, migracao e simples — mesmos conceitos.

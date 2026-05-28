@@ -150,7 +150,7 @@ harness/
 
 ## Por que esse design
 
-- **Plug-and-play** — copia a pasta `.archon/` pra qualquer projeto Sinapsis e funciona
+- **Plug-and-play** — copia a pasta `.archon/` pra qualquer your project e funciona
 - **Tudo em git** — workflows, prompts e scripts versionados; nao tem estado escondido
 - **Local-first** — nao depende de SaaS, roda em qualquer laptop com Bun + Archon
 - **Agent-agnostic** — Claude Code hoje, Codex amanha, Pi depois (via Archon)
@@ -178,7 +178,7 @@ harness/
 
 ## Proximos passos
 
-1. **Validar em 1 projeto Sinapsis pequeno** (TesteAneel sugerido)
+1. **Validar em 1 your project pequeno** (TesteAneel sugerido)
 2. **Medir** baseline (tempo de review, custo medio por task) vs com harness
 3. **Iterar** thresholds do judge + valores de cost cap
 4. **Promover** Cognition Lessons recorrentes pra memoria de time

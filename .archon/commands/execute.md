@@ -46,7 +46,7 @@ Para cada task com `acceptance_criteria` que envolve comportamento:
 
 ### 4. Mensagem de commit estruturada
 
-Padrao Sinapsis:
+Convention:
 ```
 [#<task_num>] <tipo>: <descricao>
 

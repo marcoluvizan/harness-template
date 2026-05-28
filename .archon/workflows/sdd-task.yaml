@@ -1,4 +1,4 @@
-﻿# SDD-Task â€” Spec-Driven Development workflow
+# SDD-Task â€” Spec-Driven Development workflow
 # Conformante com schema Archon (bash em vez de script object).
 #
 # Uso:
@@ -157,7 +157,7 @@ nodes:
 
         - UMA task por iteracao (nao implementa duas ao mesmo tempo)
         - NUNCA edita spec.md, design.md, tasks.json (exceto campo status)
-        - Commit Sinapsis: [#<num>] <tipo>: descricao
+        - Commit convention: [#<num>] <tipo>: descricao
         - Sem testes verdes a task NAO esta pronta
       until: ALL_TASKS_COMPLETE
       max_iterations: 20

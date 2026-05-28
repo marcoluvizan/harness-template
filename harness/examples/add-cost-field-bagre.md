@@ -4,7 +4,7 @@
 
 ## Contexto
 
-- **Projeto:** Bagre (sistema interno Sinapsis)
+- **Projeto:** Bagre (sistema interno the team)
 - **Tarefa Teamwork:** #2341 - "Adicionar regional_office ao cadastro de cliente"
 - **Branch convencao:** `feature/2341-add-regional-office`
 - **Estimativa:** small (~50 linhas em 3 arquivos)
@@ -204,7 +204,7 @@ gh pr create \
   --body "..."
 ```
 
-PR criada: https://bitbucket.org/sinapsis/bagre/pull/4521
+PR criada: https://bitbucket.org/<your-workspace>/<repo>/pull/<id>
 
 ## Resumo final
 

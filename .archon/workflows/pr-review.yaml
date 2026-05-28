@@ -6,7 +6,7 @@
 
 name: pr-review
 description: |
-  Review automatico de PR no Bitbucket. Le diff, valida convencoes Sinapsis,
+  Review automatico de PR no Bitbucket. Le diff, valida conventions,
   busca task Teamwork relacionada, gera comentario estruturado.
 
 provider: claude
@@ -19,12 +19,12 @@ nodes:
     bash: |
       TOKEN=$(cat ~/.bitbucket_token | tr -d '\n\r')
       REPO="${REPO:-bagre}"
-      curl -s -u "marco.luvizan@sinapsisenergia.com:$TOKEN" \
-        "https://api.bitbucket.org/2.0/repositories/sinapsis_sinapgrid/$REPO/pullrequests/$PR_ID" \
+      curl -s -u "you@example.com:$TOKEN" \
+        "https://api.bitbucket.org/2.0/repositories/<your-workspace>/$REPO/pullrequests/$PR_ID" \
         > $ARTIFACTS_DIR/pr.json
 
-      curl -s -u "marco.luvizan@sinapsisenergia.com:$TOKEN" \
-        "https://api.bitbucket.org/2.0/repositories/sinapsis_sinapgrid/$REPO/pullrequests/$PR_ID/diff" \
+      curl -s -u "you@example.com:$TOKEN" \
+        "https://api.bitbucket.org/2.0/repositories/<your-workspace>/$REPO/pullrequests/$PR_ID/diff" \
         > $ARTIFACTS_DIR/diff.txt
 
   - id: extract_task_number
@@ -41,7 +41,7 @@ nodes:
       TW_KEY=$(cat ~/.teamwork_token | tr -d '\n\r')
       if [ -n "$TASK_NUM" ]; then
         curl -s -u "$TW_KEY:x" \
-          "https://sinapsisenergia.teamwork.com/tasks/$TASK_NUM.json" \
+          "https://${TEAMWORK_DOMAIN}.teamwork.com/tasks/$TASK_NUM.json" \
           > $ARTIFACTS_DIR/task.json
       else
         echo "{}" > $ARTIFACTS_DIR/task.json
@@ -50,13 +50,13 @@ nodes:
   - id: validate_conventions
     depends_on: [fetch_teamwork_task]
     prompt: |
-      Voce esta validando convencoes da Sinapsis em um PR.
+      Voce esta validando convencoes da the team em um PR.
 
       PR data: ler $ARTIFACTS_DIR/pr.json
       Diff: ler $ARTIFACTS_DIR/diff.txt
       Task no Teamwork: ler $ARTIFACTS_DIR/task.json
 
-      Convencoes Sinapsis:
+      Conventions:
       - Branch: fix/<num>-descricao OU feature/<num>-descricao OU refactor/<num>-... OU chore/<num>-...
       - Commit: [#<num>] <tipo>: descricao
       - Cada PR -> uma branch + uma task Teamwork
@@ -101,10 +101,10 @@ nodes:
       EOF
       )
 
-      curl -s -u "marco.luvizan@sinapsisenergia.com:$TOKEN" \
+      curl -s -u "you@example.com:$TOKEN" \
         -X POST \
         -H "Content-Type: application/json" \
-        "https://api.bitbucket.org/2.0/repositories/sinapsis_sinapgrid/$REPO/pullrequests/$PR_ID/comments" \
+        "https://api.bitbucket.org/2.0/repositories/<your-workspace>/$REPO/pullrequests/$PR_ID/comments" \
         -d "{\"content\":{\"raw\":$(echo "$COMMENT" | jq -Rs .)}}"
 
   - id: audit_log

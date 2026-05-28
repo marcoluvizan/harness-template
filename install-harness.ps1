@@ -1,6 +1,6 @@
-﻿<#
+<#
 .SYNOPSIS
-    Instala o harness Sinapsis (Archon + .archon/ + harness/) em um projeto novo ou existente.
+    Instala o harness (Archon + .archon/ + harness/) em um projeto novo ou existente.
 
 .DESCRIPTION
     Faz drop-in da estrutura .archon/ + harness/ + .claude/settings.json a partir
@@ -14,7 +14,7 @@
 
 .PARAMETER Source
     Path do projeto fonte (golden template). Default = <set your golden template path>.
-    Aceita também URL bitbucket: bb:sinapsis_sinapgrid/harness-template (TODO).
+    Aceita também URL bitbucket: bb:<your-workspace>/harness-template (TODO).
 
 .PARAMETER Mode
     'fresh' = install limpo (apaga state existente)
@@ -56,7 +56,7 @@ param(
 )
 
 # Auto-detect Source: usa $PSScriptRoot (dir do script) se ele tem .archon + harness.
-# Caso contrário, fallback pra TesteAneel (referência inicial Sinapsis).
+# Caso contrário, fallback pra TesteAneel (initial reference template).
 if ([string]::IsNullOrWhiteSpace($Source)) {
     $scriptDir = $PSScriptRoot
     if ((Test-Path "$scriptDir\.archon") -and (Test-Path "$scriptDir\harness")) {
@@ -244,7 +244,7 @@ Write-Step "Atualizando .gitignore"
 $gitignorePath = "$Target\.gitignore"
 if (-not (Test-Path $gitignorePath)) { New-Item -ItemType File $gitignorePath | Out-Null }
 
-$marker = '# === Harness Sinapsis (managed by install-harness.ps1) ==='
+$marker = '# === Harness (managed by install-harness.ps1) ==='
 $existing = Get-Content $gitignorePath -Raw -ErrorAction SilentlyContinue
 if ($existing -and $existing.Contains($marker)) {
     Write-Ok ".gitignore já tem bloco do harness"

@@ -1,6 +1,6 @@
 # Harness Production Readiness — Lições do TesteAneel
 
-> Resultado de validação real em projeto Sinapsis (TesteAneel) com 5 auditorias + 4 runs de `sdd-task` de complexidade variada. Documento de referência pra drop-in em novos projetos.
+> Resultado de validação real em your project (TesteAneel) com 5 auditorias + 4 runs de `sdd-task` de complexidade variada. Documento de referência pra drop-in em novos projetos.
 
 ## TL;DR
 
@@ -136,7 +136,7 @@ file_integrity:
 | #4 | SMALL pós-fix | R$ ~1.50 | pipeline completa exceto create_pr |
 | **Média MEDIUM** | | **~R$ 2** | |
 
-Para 50 tasks MEDIUM/mês: ~R$ 100/mês por dev. Cabe em qualquer orçamento Sinapsis.
+Para 50 tasks MEDIUM/mês: ~R$ 100/mês por dev. Cabe em typical engineering budget.
 
 ## Roadmap pra v2
 
@@ -175,7 +175,7 @@ Para 50 tasks MEDIUM/mês: ~R$ 100/mês por dev. Cabe em qualquer orçamento Sin
 **Solução:** adicionada detecção de `pom.xml` → `mvnd test -q`; Gradle idem.
 
 ### 7. `create_pr` assumia GitHub + `gh` CLI
-**Sintoma:** Sinapsis usa Bitbucket → comando falha.
+**Sintoma:** teams that use Bitbucket → comando falha.
 **Solução:** create_pr agora detecta provider (gh/bitbucket-api/skip graceful), com fallback a Bitbucket API via `~/.bitbucket_token`.
 
 ### 8. `file_integrity` pega modificações não-committed do dev

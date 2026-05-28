@@ -244,7 +244,7 @@ OWASP 2026 elevou **sandbox insuficiente a risco de seguranca**, nao mais so qua
 - **Hoje:** subprocess + ai-jail (Akita, Rust, bubblewrap/sandbox-exec/Landlock) — clonado em `docs/cursos/.../repos/ai-jail/`
 - **Futuro:** microVM Firecracker por execucao (Linux-only, complexo no Windows)
 
-Decisao consciente: **subprocess basta pro contexto Sinapsis** (codigo nao adversarial). microVM e overhead nao justificado.
+Decisao consciente: **subprocess basta pro this context** (codigo nao adversarial). microVM e overhead nao justificado.
 
 ---
 

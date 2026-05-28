@@ -1,6 +1,6 @@
 # PLAN — Construcao do Harness em 3 Fases
 
-> Plano explicito para adocao incremental do harness em projetos reais (Sinapsis ou SemanaIA).
+> Plano explicito para adocao incremental do harness em projetos reais (internal projects).
 
 ## Filosofia
 
@@ -139,7 +139,7 @@ Cada fase deve **provar valor antes da seguinte**. Se Fase 1 nao reduz custos / 
 
 | Item | Por que nao |
 |---|---|
-| **microVM (Firecracker)** | Linux-only, hacky no Windows. ai-jail (subprocess) basta pro contexto Sinapsis. |
+| **microVM (Firecracker)** | Linux-only, hacky no Windows. ai-jail (subprocess) basta pro this context. |
 | **Harness Bundles fingerprint** | So vale quando comparar 50+ variantes de config. Time pequeno nao chega la. |
 | **Pilot layer separado** | Archon orchestrator + workflow YAML cobrem. Pilot extra e over-eng. |
 | **Multi-agent crew avancada (CrewAI/etc)** | Workflow YAML resolve. Crew sera entregue pelos workshops SemanaIA. |

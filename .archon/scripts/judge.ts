@@ -156,7 +156,7 @@ VALIDATION JSON:
 ${input}
 
 Criterios:
-1. Branch e commits seguem convencao Sinapsis
+1. Branch e commits seguem convention
 2. Numero da task no Teamwork bate com numero da branch
 3. Escopo do PR == descricao da task
 4. Testes presentes

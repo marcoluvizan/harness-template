@@ -57,7 +57,7 @@ Cada execucao loga:
 {
   "event": "agent_session_started",
   "run_id": "uuid",
-  "owner": "marco.luvizan@sinapsisenergia.com",
+  "owner": "you@example.com",
   "scope": ["bagre", "src/**/*.py"],
   "expires_at": "2026-05-27T10:00:00Z"
 }
@@ -196,7 +196,7 @@ function redact(text: string): string {
 
 Hook `PreToolUse` em qualquer chamada LLM aplica redacao antes do envio.
 
-### Contexto Sinapsis
+### Contexto the team
 
 Setor de energia tem dados regulados pela ANEEL:
 - Dados de medicao (sensiveis)
@@ -256,7 +256,7 @@ Espaco se profissionalizando:
 
 **Recomendacao Waldemar:** hibrido. Gateway pronto + policies in-house.
 
-**Para Sinapsis:** comece in-house (este harness/) e avalie buy quando escalar pra 5+ devs.
+**Recommendation:** comece in-house (este harness/) e avalie buy quando escalar pra 5+ devs.
 
 ---
 
