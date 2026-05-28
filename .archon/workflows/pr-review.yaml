@@ -1,0 +1,115 @@
+# PR Review — review automatico de PR Bitbucket
+# Conformante com schema Archon.
+#
+# Uso (envs):
+#   $env:PR_ID="4521"; $env:REPO="bagre"; archon workflow run pr-review
+
+name: pr-review
+description: |
+  Review automatico de PR no Bitbucket. Le diff, valida convencoes Sinapsis,
+  busca task Teamwork relacionada, gera comentario estruturado.
+
+provider: claude
+model: sonnet
+interactive: false
+
+nodes:
+
+  - id: fetch_pr
+    bash: |
+      TOKEN=$(cat ~/.bitbucket_token | tr -d '\n\r')
+      REPO="${REPO:-bagre}"
+      curl -s -u "marco.luvizan@sinapsisenergia.com:$TOKEN" \
+        "https://api.bitbucket.org/2.0/repositories/sinapsis_sinapgrid/$REPO/pullrequests/$PR_ID" \
+        > $ARTIFACTS_DIR/pr.json
+
+      curl -s -u "marco.luvizan@sinapsisenergia.com:$TOKEN" \
+        "https://api.bitbucket.org/2.0/repositories/sinapsis_sinapgrid/$REPO/pullrequests/$PR_ID/diff" \
+        > $ARTIFACTS_DIR/diff.txt
+
+  - id: extract_task_number
+    depends_on: [fetch_pr]
+    bash: |
+      BRANCH=$(jq -r '.source.branch.name' $ARTIFACTS_DIR/pr.json)
+      TASK_NUM=$(echo $BRANCH | grep -oE '[0-9]+' | head -1)
+      echo "$TASK_NUM" > $ARTIFACTS_DIR/task_num.txt
+
+  - id: fetch_teamwork_task
+    depends_on: [extract_task_number]
+    bash: |
+      TASK_NUM=$(cat $ARTIFACTS_DIR/task_num.txt)
+      TW_KEY=$(cat ~/.teamwork_token | tr -d '\n\r')
+      if [ -n "$TASK_NUM" ]; then
+        curl -s -u "$TW_KEY:x" \
+          "https://sinapsisenergia.teamwork.com/tasks/$TASK_NUM.json" \
+          > $ARTIFACTS_DIR/task.json
+      else
+        echo "{}" > $ARTIFACTS_DIR/task.json
+      fi
+
+  - id: validate_conventions
+    depends_on: [fetch_teamwork_task]
+    prompt: |
+      Voce esta validando convencoes da Sinapsis em um PR.
+
+      PR data: ler $ARTIFACTS_DIR/pr.json
+      Diff: ler $ARTIFACTS_DIR/diff.txt
+      Task no Teamwork: ler $ARTIFACTS_DIR/task.json
+
+      Convencoes Sinapsis:
+      - Branch: fix/<num>-descricao OU feature/<num>-descricao OU refactor/<num>-... OU chore/<num>-...
+      - Commit: [#<num>] <tipo>: descricao
+      - Cada PR -> uma branch + uma task Teamwork
+
+      Valide:
+      1. Branch name segue padrao?
+      2. Commits seguem padrao?
+      3. Numero da branch == numero da task no Teamwork?
+      4. Escopo do PR corresponde a descricao da task?
+      5. Diff tem testes para o que mudou?
+
+      Saida JSON em $ARTIFACTS_DIR/validation.json:
+      {"branch_ok":bool,"commits_ok":bool,"task_link_ok":bool,"scope_match":bool,"tests_present":bool,"score":0.0-1.0,"summary":"...","issues":[...],"suggestions":[...]}
+
+  - id: judge_review
+    depends_on: [validate_conventions]
+    bash: |
+      .archon/bin/bun.exe run .archon/scripts/judge.ts --phase=pr-review --input=$ARTIFACTS_DIR/validation.json --against=$ARTIFACTS_DIR/task.json --run-id=$WORKFLOW_ID
+
+  - id: post_comment
+    depends_on: [judge_review]
+    bash: |
+      TOKEN=$(cat ~/.bitbucket_token | tr -d '\n\r')
+      REPO="${REPO:-bagre}"
+
+      COMMENT=$(cat <<EOF
+      ## Review Automatico do Harness
+
+      $(jq -r '.summary // "Review completo"' $ARTIFACTS_DIR/validation.json)
+
+      ### Checks
+      - Branch convencao: $(jq -r '.branch_ok' $ARTIFACTS_DIR/validation.json)
+      - Commit convencao: $(jq -r '.commits_ok' $ARTIFACTS_DIR/validation.json)
+      - Link Teamwork: $(jq -r '.task_link_ok' $ARTIFACTS_DIR/validation.json)
+      - Escopo: $(jq -r '.scope_match' $ARTIFACTS_DIR/validation.json)
+      - Testes: $(jq -r '.tests_present' $ARTIFACTS_DIR/validation.json)
+
+      Score: $(jq -r '.score' $ARTIFACTS_DIR/validation.json)
+
+      ---
+      _Gerado por harness/pr-review.yaml — run $WORKFLOW_ID_
+      EOF
+      )
+
+      curl -s -u "marco.luvizan@sinapsisenergia.com:$TOKEN" \
+        -X POST \
+        -H "Content-Type: application/json" \
+        "https://api.bitbucket.org/2.0/repositories/sinapsis_sinapgrid/$REPO/pullrequests/$PR_ID/comments" \
+        -d "{\"content\":{\"raw\":$(echo "$COMMENT" | jq -Rs .)}}"
+
+  - id: audit_log
+    depends_on: [post_comment]
+    bash: |
+      TS=$(date -Iseconds 2>/dev/null || date)
+      SCORE=$(jq -r '.score' $ARTIFACTS_DIR/validation.json)
+      echo "{\"event\":\"pr_review_completed\",\"run_id\":\"$WORKFLOW_ID\",\"pr_id\":\"$PR_ID\",\"score\":$SCORE,\"ts\":\"$TS\"}" >> events/$WORKFLOW_ID.jsonl

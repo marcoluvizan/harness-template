@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "PowerShell(*)",
+      "Read",
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "Glob",
+      "Grep",
+      "Agent",
+      "WebFetch",
+      "WebSearch",
+      "NotebookEdit",
+      "TodoWrite",
+      "TaskCreate",
+      "TaskUpdate",
+      "TaskList",
+      "TaskGet",
+      "TaskStop",
+      "TaskOutput",
+      "Monitor",
+      "ScheduleWakeup",
+      "AskUserQuestion",
+      "Skill",
+      "ToolSearch",
+      "CronCreate",
+      "CronList",
+      "CronDelete",
+      "PushNotification",
+      "RemoteTrigger"
+    ],
+    "deny": [],
+    "defaultMode": "acceptEdits"
+  },
+  "env": { "JAVA_HOME": "/c/Java/jdk-17.0.17" }
+}

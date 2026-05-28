@@ -1,0 +1,310 @@
+﻿# SDD-Task â€” Spec-Driven Development workflow
+# Conformante com schema Archon (bash em vez de script object).
+#
+# Uso:
+#   archon workflow run sdd-task "<task description>"
+
+name: sdd-task
+description: |
+  Spec-Driven Development workflow. Forca SPECIFY -> DESIGN -> TASKS -> EXECUTE
+  com Judge depois de cada fase + Cost Cap + File Integrity + Cognition Lessons.
+  Implementa 7 Pilares do Felipe Rodrigues + 5 Focos do Waldemar Neto.
+
+provider: claude
+model: opus
+interactive: true
+
+nodes:
+
+  # ============================================================================
+  # IDENTITY & SETUP (Foco 1 - Governanca)
+  # ============================================================================
+
+  - id: identity_log
+    bash: |
+      # $ARTIFACTS_DIR ja existe (pre-criado pelo Archon executor)
+      # Nao chame mkdir nele â€” bash do MSYS interpreta backslashes do path Windows como literais.
+      # GOTCHA: Archon prÃ©-substitui $VARNAME no template ANTES do bash rodar.
+      # Apenas $WORKFLOW_ID e $ARGUMENTS sobrevivem. Vars locais bash viram "".
+      # SoluÃ§Ã£o: escrever direto de comandos pra arquivo, sem variÃ¡veis intermediÃ¡rias.
+      mkdir -p events lessons
+      git rev-parse HEAD > "events/$WORKFLOW_ID-start-sha.txt" 2>/dev/null
+      git rev-parse --show-toplevel > "events/$WORKFLOW_ID-repo.txt" 2>/dev/null
+      pwd > "events/$WORKFLOW_ID-cwd.txt"
+      date -Iseconds > "events/$WORKFLOW_ID-ts.txt" 2>/dev/null
+      # JSON enxuto (sÃ³ $WORKFLOW_ID e $ARGUMENTS pq esses Archon expande)
+      echo "{\"event\":\"agent_session_started\",\"run_id\":\"$WORKFLOW_ID\",\"task\":\"$ARGUMENTS\"}" >> "events/$WORKFLOW_ID-start.jsonl"
+      echo "identity_log OK"
+
+  - id: cost_cap_init
+    depends_on: [identity_log]
+    bash: |
+      .archon/bin/bun.exe run .archon/scripts/cost_cap.ts init --run-id $WORKFLOW_ID
+
+  # ============================================================================
+  # AUTO-SIZING
+  # ============================================================================
+
+  - id: auto_size
+    depends_on: [cost_cap_init]
+    prompt: |
+      Voce e um classificador de complexidade de tarefa.
+
+      Tarefa: $ARGUMENTS
+
+      Classifique em UMA palavra:
+      - SMALL: bug fix ou feature pequena ate ~80 linhas, sem novos modulos
+      - MEDIUM: feature media 30-300 linhas, pode envolver multiplos arquivos
+      - LARGE: feature grande > 300 linhas, mudanca arquitetural
+
+      Mesmo tarefas pequenas (1-10 linhas) sao SMALL â€” sempre passam pelo pipeline minimo
+      (specify + tasks + execute_loop + gates) para auditoria. TRIVIAL nao existe mais.
+
+      Responda APENAS a palavra (SMALL/MEDIUM/LARGE).
+
+  # ============================================================================
+  # PILAR 1 - SDD: FASE SPECIFY
+  # ============================================================================
+
+  - id: specify
+    depends_on: [auto_size]
+    command: specify
+
+  - id: judge_specify
+    depends_on: [specify]
+    bash: |
+      .archon/bin/bun.exe run .archon/scripts/judge.ts --phase=specify --input=$ARTIFACTS_DIR/spec.md --task="$ARGUMENTS" --run-id=$WORKFLOW_ID
+    on_fail:
+      action: retry
+      max_retries: 3
+
+  # ============================================================================
+  # PILAR 1 - SDD: FASE DESIGN
+  # ============================================================================
+
+  # Nota: design + judge_design sempre rodam (mesmo SMALL).
+  # Custo extra ~R$0.50 mas mantÃ©m pipeline consistente e evita cascade-skip.
+  # Para SMALL o LLM produzirÃ¡ um design conciso, proporcional Ã  spec.
+  - id: design
+    depends_on: [judge_specify]
+    command: design
+
+  - id: judge_design
+    depends_on: [design]
+    bash: |
+      .archon/bin/bun.exe run .archon/scripts/judge.ts --phase=design --input=$ARTIFACTS_DIR/design.md --against=$ARTIFACTS_DIR/spec.md --run-id=$WORKFLOW_ID
+    on_fail:
+      action: retry
+      max_retries: 3
+
+  # ============================================================================
+  # PILAR 1 - SDD: FASE TASKS
+  # ============================================================================
+
+  - id: tasks
+    depends_on: [judge_design]
+    command: tasks
+
+  - id: judge_tasks
+    depends_on: [tasks]
+    bash: |
+      .archon/bin/bun.exe run .archon/scripts/judge.ts --phase=tasks --input=$ARTIFACTS_DIR/tasks.json --against=$ARTIFACTS_DIR/design.md --run-id=$WORKFLOW_ID
+    on_fail:
+      action: retry
+      max_retries: 3
+
+  - id: freeze_artifacts
+    depends_on: [judge_tasks]
+    bash: |
+      mkdir -p "$ARTIFACTS_DIR/_meta"
+      printf "%s\n" "$ARTIFACTS_DIR/spec.md" "$ARTIFACTS_DIR/design.md" "$ARTIFACTS_DIR/tasks.json" > "$ARTIFACTS_DIR/_meta/frozen.txt"
+      echo "FROZEN listed in $ARTIFACTS_DIR/_meta/frozen.txt"
+
+  # ============================================================================
+  # PILAR 1 - SDD: FASE EXECUTE (loop com gates)
+  # ============================================================================
+
+  - id: execute_loop
+    depends_on: [freeze_artifacts]
+    loop:
+      prompt: |
+        Voce esta na fase EXECUTE do SDD.
+
+        Spec: $ARTIFACTS_DIR/spec.md (FROZEN)
+        Design: $ARTIFACTS_DIR/design.md (FROZEN)
+        Tasks: $ARTIFACTS_DIR/tasks.json (FROZEN, exceto campo 'status' das tasks)
+
+        Leia tambem o command em .archon/commands/execute.md para regras completas.
+
+        Loop iteration anterior: $LOOP_PREV_OUTPUT
+
+        ## Fluxo desta iteracao
+
+        1. Le $ARTIFACTS_DIR/tasks.json
+        2. Encontra PROXIMA task com status="pending" cujas dependencias estao "completed"
+        3. Implementa apenas ESSA task (uma por iteracao)
+        4. Valida os criterios de aceite da task
+        5. Atualiza status="completed" no tasks.json (Edit cirurgico)
+        6. Reporte status no fim da iteracao
+
+        ## Sinal de fim
+
+        Se TODAS as tasks tem status="completed" (ou "skipped"), responda
+        EXATAMENTE: ALL_TASKS_COMPLETE
+        Sem qualquer texto antes ou depois.
+
+        ## Regras criticas
+
+        - UMA task por iteracao (nao implementa duas ao mesmo tempo)
+        - NUNCA edita spec.md, design.md, tasks.json (exceto campo status)
+        - Commit Sinapsis: [#<num>] <tipo>: descricao
+        - Sem testes verdes a task NAO esta pronta
+      until: ALL_TASKS_COMPLETE
+      max_iterations: 20
+      fresh_context: true
+
+  # ============================================================================
+  # PILAR 4 - Completion Gates (cascata por custo, barato primeiro)
+  # ============================================================================
+
+  - id: gate_lint
+    depends_on: [execute_loop]
+    bash: |
+      # Detecta stack do projeto e roda lint correspondente.
+      # Adicione novos casos aqui conforme adotar em outros projetos.
+      if [ -f "package.json" ] && grep -q '"lint"' package.json 2>/dev/null; then
+        npm run lint 2>&1 || exit 1
+      elif [ -f "pyproject.toml" ]; then
+        if command -v ruff >/dev/null 2>&1; then ruff check . 2>&1 || exit 1
+        else echo "ruff nÃ£o instalado, pulando"; fi
+      elif [ -f "pom.xml" ]; then
+        # Maven: spotless/checkstyle se configurado. Caso contrÃ¡rio, validate.
+        if grep -q "spotless-maven-plugin\|maven-checkstyle-plugin" pom.xml; then
+          mvnd.cmd validate 2>&1 || mvn validate 2>&1 || exit 1
+        else
+          echo "Maven sem lint plugin configurado, pulando"
+        fi
+      else
+        echo "stack desconhecida, pulando lint"
+      fi
+
+  - id: gate_tests
+    depends_on: [gate_lint]
+    bash: |
+      # Detecta stack e roda testes. Falha = fail-loud (PR nÃ£o cria).
+      if [ -f "package.json" ] && grep -q '"test"' package.json 2>/dev/null; then
+        npm test 2>&1 || exit 1
+      elif [ -f "pyproject.toml" ] && command -v pytest >/dev/null 2>&1; then
+        pytest 2>&1 || exit 1
+      elif [ -f "pom.xml" ]; then
+        if command -v mvnd.cmd >/dev/null 2>&1; then
+          mvnd.cmd test -q 2>&1 || exit 1
+        elif command -v mvn >/dev/null 2>&1; then
+          mvn test -q 2>&1 || exit 1
+        else
+          echo "Maven detectado mas mvn/mvnd nÃ£o no PATH, pulando"
+        fi
+      elif [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
+        ./gradlew test 2>&1 || exit 1
+      else
+        echo "stack desconhecida, pulando testes"
+      fi
+
+  - id: gate_file_integrity
+    depends_on: [gate_tests]
+    bash: |
+      .archon/bin/bun.exe run .archon/scripts/file_integrity.ts --check-mode=git-diff --frozen-list=$ARTIFACTS_DIR/_meta/frozen.txt --run-id=$WORKFLOW_ID
+
+  - id: gate_change_sufficiency
+    depends_on: [gate_file_integrity]
+    bash: |
+      .archon/bin/bun.exe run .archon/scripts/change_sufficiency.ts --tasks=$ARTIFACTS_DIR/tasks.json --base-branch=main --run-id=$WORKFLOW_ID
+
+  - id: gate_embedding
+    depends_on: [gate_change_sufficiency]
+    bash: |
+      # GOTCHA Archon: $VARNAME no template Ã© prÃ©-substituÃ­do. Workaround: passar PATHS pros scripts
+      # (eles aceitam path E string via existsSync) em vez de $(cat ...) que falha entre subprocessos.
+      if [ ! -s "events/$WORKFLOW_ID-start-sha.txt" ] || [ ! -s "events/$WORKFLOW_ID-repo.txt" ]; then
+        echo "embedding_filter: SHA/REPO files vazios, pulando"
+        exit 0
+      fi
+      git -C "$(cat events/$WORKFLOW_ID-repo.txt)" diff "$(cat events/$WORKFLOW_ID-start-sha.txt)" HEAD --stat > "events/$WORKFLOW_ID-diff-stat.txt"
+      .archon/bin/bun.exe run .archon/scripts/embedding_filter.ts --spec=$ARTIFACTS_DIR/spec.md --actual="events/$WORKFLOW_ID-diff-stat.txt" --run-id=$WORKFLOW_ID
+
+  - id: gate_judge_final
+    depends_on: [gate_embedding]
+    bash: |
+      # GOTCHA Archon: $VARNAME prÃ©-substituÃ­do. Passa PATH pro judge (ele faz existsSync+readFileSync).
+      if [ ! -s "events/$WORKFLOW_ID-start-sha.txt" ] || [ ! -s "events/$WORKFLOW_ID-repo.txt" ]; then
+        echo "judge_final: SHA/REPO files vazios, pulando"
+        exit 0
+      fi
+      git -C "$(cat events/$WORKFLOW_ID-repo.txt)" diff "$(cat events/$WORKFLOW_ID-start-sha.txt)" HEAD > "events/$WORKFLOW_ID-diff.txt"
+      if [ ! -s "events/$WORKFLOW_ID-diff.txt" ]; then
+        echo "judge_final: sem diff (execute_loop sem mudanÃ§as), pulando"
+        exit 0
+      fi
+      .archon/bin/bun.exe run .archon/scripts/judge.ts --phase=final --input="events/$WORKFLOW_ID-diff.txt" --against=$ARTIFACTS_DIR/spec.md --run-id=$WORKFLOW_ID
+    on_fail:
+      action: retry
+      max_retries: 2
+
+  # ============================================================================
+  # APROVACAO HUMANA
+  # ============================================================================
+
+  - id: human_approval
+    depends_on: [gate_judge_final]
+    approval:
+      message: |
+        Workflow SDD completo.
+
+        Artefatos: spec.md, design.md, tasks.json em $ARTIFACTS_DIR/
+        Diff: rode `git diff main` para conferir
+        Cost: rode `.archon/bin/bun.exe run .archon/scripts/cost_cap.ts report --run-id $WORKFLOW_ID`
+
+        Aprovar criacao de PR?
+      capture_response: true
+
+  - id: create_pr
+    depends_on: [human_approval]
+    bash: |
+      # GOTCHA Archon: $ARTIFACTS_DIR vem com path Windows (D:\...). WSL bash come os '\'.
+      # Convertemos: D:\ â†’ /mnt/d/  e \ â†’ /
+      _spec=$(echo "$ARTIFACTS_DIR/spec.md" | sed -e 's|^\([A-Za-z]\):|/mnt/\L\1|' -e 's|\\|/|g')
+      if [ ! -f "$_spec" ]; then
+        # Fallback: spec sempre em .archon/artifacts/runs/<id>/spec.md no project root
+        _spec="$(cat events/$WORKFLOW_ID-repo.txt)/.archon/artifacts/runs/$WORKFLOW_ID/spec.md"
+      fi
+      if [ ! -f "$_spec" ]; then
+        echo "create_pr: spec.md nÃ£o encontrada em '$_spec' nem ARTIFACTS_DIR"
+        exit 1
+      fi
+      _title="[#$WORKFLOW_ID] $(head -1 $_spec | sed 's/^# //')"
+      _body="Generated by SDD harness workflow. run_id: $WORKFLOW_ID"
+      # Detecta provider: gh (GitHub), curl Bitbucket, ou fallback git push + log
+      if command -v gh >/dev/null 2>&1 && git remote -v | grep -q github; then
+        gh pr create --title "$_title" --body "$_body"
+      elif [ -f "$HOME/.bitbucket_token" ] && git remote -v | grep -q bitbucket; then
+        _token=$(cat "$HOME/.bitbucket_token" | tr -d '\r\n')
+        _email="${BITBUCKET_EMAIL:-you@example.com}"
+        _ws="${BITBUCKET_WORKSPACE:-your-workspace}"
+        _repo=$(git remote get-url origin | sed -E 's|.*/([^/]+)\.git|\1|' | sed 's/.git$//')
+        _branch=$(git rev-parse --abbrev-ref HEAD)
+        _payload=$(printf '{"title":"%s","source":{"branch":{"name":"%s"}},"destination":{"branch":{"name":"main"}},"description":"%s"}' "$_title" "$_branch" "$_body")
+        curl -sf -u "$_email:$_token" -X POST -H "Content-Type: application/json" \
+          "https://api.bitbucket.org/2.0/repositories/$_ws/$_repo/pullrequests" \
+          -d "$_payload" | head -c 200
+      else
+        echo "create_pr: nem gh nem bitbucket configurado, pulando criaÃ§Ã£o de PR (PR manual recomendado)"
+        echo "Title sugerido: $_title"
+        echo "Branch: $(git rev-parse --abbrev-ref HEAD)"
+        exit 0
+      fi
+
+  - id: session_end_log
+    depends_on: [create_pr]
+    bash: |
+      TS=$(date -Iseconds 2>/dev/null || date)
+      echo "{\"event\":\"agent_session_ended\",\"run_id\":\"$WORKFLOW_ID\",\"status\":\"completed\",\"ts\":\"$TS\"}" >> events/$WORKFLOW_ID-end.jsonl

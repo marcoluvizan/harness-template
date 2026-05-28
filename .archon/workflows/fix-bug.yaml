@@ -1,0 +1,116 @@
+# Fix-Bug — bug fix rapido com gates obrigatorios
+# Conformante com schema Archon.
+#
+# Uso:
+#   archon workflow run fix-bug "fix validacao CPF vazio (#1234)"
+
+name: fix-bug
+description: |
+  Bug fix rapido. Pula SPECIFY/DESIGN, vai direto pra mini-spec + TDD + gates.
+  Mantem File Integrity, Change Sufficiency, Judge final.
+
+provider: claude
+model: sonnet
+interactive: true
+
+nodes:
+
+  - id: identity_log
+    bash: |
+      # $ARTIFACTS_DIR ja existe (pre-criado pelo Archon executor)
+      mkdir -p events
+      OWNER="${USER:-${USERNAME:-unknown}}"
+      TS=$(date -Iseconds 2>/dev/null || date)
+      echo "{\"event\":\"bugfix_session_started\",\"run_id\":\"$WORKFLOW_ID\",\"owner\":\"$OWNER\",\"task\":\"$ARGUMENTS\",\"ts\":\"$TS\"}" >> events/$WORKFLOW_ID-start.jsonl
+
+  - id: cost_cap_init
+    depends_on: [identity_log]
+    bash: |
+      .archon/bin/bun.exe run .archon/scripts/cost_cap.ts init --run-id $WORKFLOW_ID
+
+  - id: write_mini_spec
+    depends_on: [cost_cap_init]
+    prompt: |
+      Bug fix request: $ARGUMENTS
+
+      Escreva uma MINI spec (max 10 linhas) em $ARTIFACTS_DIR/spec.md:
+      - Sintoma (1 linha)
+      - Causa raiz suspeita (1-2 linhas)
+      - Comportamento esperado (1-2 linhas)
+      - Criterio de aceite (1-3 linhas, focado em teste)
+
+      Nao escreva mais que 10 linhas. Salve em $ARTIFACTS_DIR/spec.md.
+
+  - id: write_failing_test
+    depends_on: [write_mini_spec]
+    prompt: |
+      Antes de fixar, escreva o teste que reproduz o bug.
+
+      Spec: $ARTIFACTS_DIR/spec.md
+
+      1. Identifique onde o teste deve viver
+      2. Escreva o teste que FALHA atualmente
+      3. Rode o teste e confirme que falha
+      4. Reporte arquivo + linha do teste
+
+      Se nao conseguir reproduzir, pare e reporte.
+
+  - id: implement_fix
+    depends_on: [write_failing_test]
+    prompt: |
+      Agora implementa o fix.
+
+      Spec: $ARTIFACTS_DIR/spec.md (FROZEN)
+      Teste failing: identificado no node anterior (FROZEN, nao mexer)
+
+      Implemente o fix. Quando terminar:
+      1. Rode o teste failing (deve passar agora)
+      2. Rode TODA a suite (nenhum outro teste pode quebrar)
+      3. Reporte status
+
+  - id: gate_tests
+    depends_on: [implement_fix]
+    bash: |
+      if [ -f "package.json" ]; then
+        npm test 2>&1 || exit 1
+      elif [ -f "pyproject.toml" ]; then
+        pytest 2>&1 || exit 1
+      fi
+
+  - id: gate_change_sufficiency
+    depends_on: [gate_tests]
+    bash: |
+      .archon/bin/bun.exe run .archon/scripts/change_sufficiency.ts --mode=fix-bug --expected-lines=1-30 --base-branch=main --run-id=$WORKFLOW_ID
+
+  - id: gate_file_integrity
+    depends_on: [gate_change_sufficiency]
+    bash: |
+      .archon/bin/bun.exe run .archon/scripts/file_integrity.ts --check-mode=git-diff --frozen=$ARTIFACTS_DIR/spec.md --run-id=$WORKFLOW_ID
+
+  - id: gate_judge
+    depends_on: [gate_file_integrity]
+    bash: |
+      DIFF=$(git diff main)
+      .archon/bin/bun.exe run .archon/scripts/judge.ts --phase=fix-bug-final --input="$DIFF" --against=$ARTIFACTS_DIR/spec.md --run-id=$WORKFLOW_ID
+
+  - id: human_approval
+    depends_on: [gate_judge]
+    approval:
+      message: |
+        Bug fix completo.
+
+        Spec: $ARTIFACTS_DIR/spec.md
+        Diff: rode `git diff main`
+        Tests: passing
+
+        Aprovar criacao de PR?
+      capture_response: true
+
+  - id: create_pr
+    depends_on: [human_approval]
+    bash: |
+      TASK_NUM=$(echo "$ARGUMENTS" | grep -oE '#?[0-9]{3,}' | head -1 | tr -d '#')
+      TASK_NUM=${TASK_NUM:-0000}
+      gh pr create \
+        --title "[#$TASK_NUM] fix: $(head -1 $ARTIFACTS_DIR/spec.md)" \
+        --body "$(cat $ARTIFACTS_DIR/spec.md)\n\nrun_id: $WORKFLOW_ID"

@@ -1,0 +1,211 @@
+# Harness Configuration
+# Copie para .archon/config.yaml na raiz do projeto onde for usar
+
+# ============================================================================
+# Archon-specific: worktree (necessario quando nao tem remote 'origin')
+# ============================================================================
+worktree:
+  baseBranch: main
+
+# ============================================================================
+# Pilar 5 - Guardrails: Cost Cap
+# ============================================================================
+cost:
+  # Limite por run em BRL. Run e abortado se passar.
+  limit_brl: 10.00
+
+  # Limite diario por usuario (soma de todos os runs)
+  daily_limit_brl: 50.00
+
+  # Avisa em % do limite (sem bloquear)
+  warn_at_percent: 80
+
+  # Onde guardar o estado de custo
+  state_file: ".archon/state/cost.json"
+
+  # Conversao USD -> BRL (judge.ts converte total_cost_usd do Claude CLI)
+  # Para override por sessao: $env:USD_TO_BRL = "5.20"
+  usd_to_brl: 5.0
+
+# ============================================================================
+# Pilar 5 - Guardrails: File Integrity
+# ============================================================================
+file_integrity:
+  # Globs de arquivos que NAO podem ser modificados durante uma task
+  # (sao "congelados" assim que a task comeca)
+  frozen_paths:
+    - "harness/**/*.md"          # docs do proprio harness
+    - "$ARTIFACTS_DIR/spec.md"   # spec gerada pela fase SPECIFY
+    - "$ARTIFACTS_DIR/design.md" # design gerado pela fase DESIGN
+    - "$ARTIFACTS_DIR/tasks.json"  # task definition
+
+  # Globs que sempre exigem aprovacao humana antes de editar
+  approval_required:
+    - ".env*"
+    - "**/credentials/**"
+    - "**/secrets/**"
+
+# ============================================================================
+# Pilar 5 - Guardrails: Change Sufficiency
+# ============================================================================
+change_sufficiency:
+  # Faixas tipicas de diff para validacao automatica
+  # Cada task pode override individualmente
+  defaults:
+    trivial:
+      min_lines: 1
+      max_lines: 10
+    small:
+      min_lines: 5
+      max_lines: 80
+    medium:
+      min_lines: 30
+      max_lines: 300
+    large:
+      min_lines: 100
+      max_lines: 1500
+
+  # Se diff sair da faixa, qual a politica?
+  out_of_range_policy: "warn"  # warn | block
+
+# ============================================================================
+# Pilar 3 - Judge
+# ============================================================================
+# Usa Claude CLI (claude -p) como subprocess. Herda auth do Claude Pro Max
+# logado no VSCode. NAO precisa ANTHROPIC_API_KEY.
+# Para path custom do claude binario, set CLAUDE_BIN_PATH env var.
+judge:
+  # Threshold de aprovacao (0.0 a 1.0)
+  threshold: 0.7
+
+  # Quantas tentativas antes de halt
+  max_retries: 3
+
+  # Politica em caso de score abaixo do threshold
+  policy_on_fail: "RETRY"      # RETRY | SKIP | HALT
+
+  # Modelo do judge (deve ser diferente do executor para evitar auto-aprovacao)
+  # Aliases aceitos: opus, sonnet, haiku (ou IDs completos)
+  model: "sonnet"
+
+  # Modelo do executor (so referencia, nao usado direto aqui)
+  executor_model: "opus"
+
+# ============================================================================
+# Pilar 4 - Embedding Filter (pre-judge barato)
+# ============================================================================
+# DESLIGADO por padrao. Voyage/OpenAI sao providers separados (precisam de key
+# propria, nao herdam auth Claude). Ligue manualmente quando tiver:
+#   $env:VOYAGE_API_KEY = "..."
+# Sem este gate o workflow funciona — apenas vai direto pro Judge LLM
+# (mais caro, mas funcional).
+embedding:
+  enabled: false               # true SO se voce tem VOYAGE_API_KEY ou OPENAI_API_KEY
+
+  # Provider: voyage | openai
+  provider: "voyage"
+
+  # Modelo
+  model: "voyage-3"
+
+  # Threshold de similaridade spec vs output (0.0 a 1.0)
+  # Abaixo disso, reprova direto sem chamar judge
+  threshold: 0.5
+
+  # API key via env var (nao colocar aqui)
+  api_key_env: "VOYAGE_API_KEY"
+
+# ============================================================================
+# Pilar 6 - Resiliencia
+# ============================================================================
+resilience:
+  stall_detection:
+    # Se o output do agente nao mudou em N segundos, considera stall
+    timeout_seconds: 180
+
+    # Se mesma tool foi chamada N vezes seguidas com mesmos args
+    same_tool_loop_threshold: 5
+
+    # Acao em caso de stall
+    on_stall: "fallback"        # fallback | abort | continue
+
+  fallback_chain:
+    # Cadeia de modelos: do mais leve/barato ao mais forte
+    chain:
+      - "claude-haiku-4-5-20251001"
+      - "claude-sonnet-4-6"
+      - "claude-opus-4-7"
+
+    # Quando esgotar a chain
+    on_exhausted: "human"        # human | abort
+
+# ============================================================================
+# Pilar 7 - Observabilidade
+# ============================================================================
+observability:
+  # Event store local. NOTA: Archon escreve eventos automaticamente em .archon/logs/<run-id>.jsonl
+  # — este caminho é apenas para eventos custom emitidos pelos próprios bash nodes (identity_log etc).
+  event_store_path: "events/"
+
+  # Schemas de evento
+  event_types:
+    - "agent_session_started"
+    - "agent_session_ended"
+    - "tool_call_started"
+    - "tool_call_completed"
+    - "tool_call_blocked"
+    - "gate_passed"
+    - "gate_failed"
+    - "judge_invoked"
+    - "judge_decision"
+    - "stall_detected"
+    - "fallback_triggered"
+    - "cost_warning"
+    - "cost_limit_reached"
+    - "kill_switch_triggered"
+
+  # Cognition Lessons
+  lessons:
+    path: "lessons/"
+    auto_generate_on:
+      - "gate_failed"
+      - "judge_decision"   # quando rejected
+      - "stall_detected"
+
+    # Promove para memoria de time depois de N ocorrencias
+    promote_after_occurrences: 3
+
+  # Export para sistemas externos (Fase 3+)
+  langfuse:
+    enabled: false
+    api_url: ""
+    api_key_env: "LANGFUSE_API_KEY"
+
+# ============================================================================
+# Foco 1 - Identidade para Agentes
+# ============================================================================
+identity:
+  # Como identificar o owner do run (env var ou static)
+  owner_env: "USER"
+
+  # Lifecycle default (run expira em X horas)
+  default_lifetime_hours: 24
+
+  # Arquivo de kill switch global
+  kill_switch_file: "events/kill"
+
+  # Polling interval do kill switch (segundos)
+  kill_switch_check_interval: 5
+
+# ============================================================================
+# SDD Workflow
+# ============================================================================
+sdd:
+  # Diretorio onde os artefatos (spec.md, design.md, tasks.json) sao salvos
+  artifacts_dir: "$ARTIFACTS_DIR"
+
+  # Auto-sizing: tarefas com tasks_estimated <= N pulam SPECIFY/DESIGN
+  auto_size_threshold_lines: 10
+
+  # Pode pular alguma fase manualmente?
+  allow_skip: false

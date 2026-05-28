@@ -1,0 +1,25 @@
+﻿# State per-project (não versionar) - só .gitkeep mantém estrutura
+.archon/state/*
+!.archon/state/.gitkeep
+.archon/logs/*
+!.archon/logs/.gitkeep
+.archon/artifacts/*
+!.archon/artifacts/.gitkeep
+harness/events/*
+!harness/events/.gitkeep
+harness/lessons/*
+!harness/lessons/.gitkeep
+
+# Paths corrompidos por bash WSL interpretando D:\ como literal Unicode
+D[*
+D*[*
+
+# Backups gerados pelo install-harness mode=upgrade
+.archon.bak-*/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
